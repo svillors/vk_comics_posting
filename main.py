@@ -4,67 +4,79 @@ import os
 from dotenv import load_dotenv
 
 
+class VkApiError(Exception):
+    pass
+
+
 def check_vk_response(response):
     if 'error' in response:
-        raise Exception(
+        raise VkApiError(
                 f'VK API error: {response['error']['error_msg']}')
 
 
-def post_image(access_token, group_id, file_path, text):
-    try:
-        params = {
-            'access_token': access_token,
-            'v': '5.199',
-            'group_id': group_id
-        }
-        response = requests.get(
-            'https://api.vk.ru/method/photos.getWallUploadServer',
-            params=params
-        )
-        response.raise_for_status()
-        response_json = response.json()
-        check_vk_response(response_json)
-        with open(file_path, 'rb') as file:
-            url = response_json['response']['upload_url']
-            files = {
-                'photo': file,
-            }
-            response = requests.post(url, files=files)
-            response.raise_for_status()
-            response_json = response.json()
-            check_vk_response(response_json)
-        params = {
-            'access_token': access_token,
-            'photo': response_json['photo'],
-            'server': response_json['server'],
-            'hash': response_json['hash'],
-            'v': '5.199'
+def get_upload_server(access_token, group_id):
+    params = {
+        'access_token': access_token,
+        'v': '5.199',
+        'group_id': group_id
+    }
+    response = requests.get(
+        'https://api.vk.ru/method/photos.getWallUploadServer',
+        params=params
+    )
+    response.raise_for_status()
+    response_api = response.json()
+    check_vk_response(response_api)
+    return response_api
 
+
+def upload_photo(response, file_path):
+    with open(file_path, 'rb') as file:
+        url = response['response']['upload_url']
+        files = {
+            'photo': file,
         }
-        response = requests.post(
-            'https://api.vk.ru/method/photos.saveWallPhoto',
-            params=params
-        )
+        response = requests.post(url, files=files)
         response.raise_for_status()
-        response_json = response.json()
-        check_vk_response(response_json)
-        owner_id = response_json['response'][0]['owner_id']
-        image_id = response_json['response'][0]['id']
-        params = {
-            'access_token': access_token,
-            'owner_id': owner_id,
-            'message': text,
-            "attachments": 'photo{}_{}'.format(owner_id, image_id),
-            'v': '5.199'
-        }
-        response = requests.post(
-            'https://api.vk.com/method/wall.post',
-            params=params
-        )
-        response.raise_for_status()
-        check_vk_response(response.json())
-    except Exception as e:
-        print(e)
+    response_api = response.json()
+    check_vk_response(response_api)
+    return response_api
+
+
+def save_photo(response, access_token):
+    params = {
+        'access_token': access_token,
+        'photo': response['photo'],
+        'server': response['server'],
+        'hash': response['hash'],
+        'v': '5.199'
+    }
+    response = requests.post(
+        'https://api.vk.ru/method/photos.saveWallPhoto',
+        params=params
+    )
+    response.raise_for_status()
+    response_api = response.json()
+    check_vk_response(response_api)
+    return response_api
+
+
+def post_image(response, access_token, text):
+    owner_id = response['response'][0]['owner_id']
+    image_id = response['response'][0]['id']
+    params = {
+        'access_token': access_token,
+        'owner_id': owner_id,
+        'message': text,
+        "attachments": 'photo{}_{}'.format(owner_id, image_id),
+        'v': '5.199'
+    }
+    response = requests.post(
+        'https://api.vk.com/method/wall.post',
+        params=params
+    )
+    response.raise_for_status()
+    check_vk_response(response.json())
 
 
 def download_image(url, path, params=None):
@@ -84,14 +96,27 @@ def get_random_xkcd():
 
 
 def main():
-    load_dotenv()
     comics = get_random_xkcd()
     download_image(comics['img'], 'xkcd.png')
-    acces_token = os.getenv("VK_ACCESS_TOKEN")
-    group_id = os.getenv('VK_GROUP_ID')
-    text = comics['alt']
-    post_image(acces_token, group_id, 'xkcd.png', text)
-    os.remove('xkcd.png')
+    try:
+        load_dotenv()
+        access_token = os.environ["VK_ACCESS_TOKEN"]
+        group_id = os.environ['VK_GROUP_ID']
+        text = comics['alt']
+        upload_server_response = get_upload_server(access_token, group_id)
+        upload_photo_response = upload_photo(upload_server_response,
+                                             'xkcd.png')
+        save_photo_response = save_photo(upload_photo_response, access_token)
+        post_image(save_photo_response, access_token, text)
+    except requests.exceptions.RequestException as e:
+        print(e)
+    except KeyError:
+        print('Environment variables are not set correctly.')
+    except VkApiError as e:
+        print(e)
+    finally:
+        if os.path.exists('xkcd.png'):
+            os.remove('xkcd.png')
 
 
 if __name__ == "__main__":
