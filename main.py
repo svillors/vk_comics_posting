@@ -25,9 +25,9 @@ def get_upload_server(access_token, group_id):
         params=params
     )
     response.raise_for_status()
-    response_api = response.json()
-    check_vk_response(response_api)
-    return response_api
+    api_response = response.json()
+    check_vk_response(api_response)
+    return api_response
 
 
 def upload_photo(response, file_path):
@@ -37,10 +37,10 @@ def upload_photo(response, file_path):
             'photo': file,
         }
         response = requests.post(url, files=files)
-        response.raise_for_status()
-    response_api = response.json()
-    check_vk_response(response_api)
-    return response_api
+    response.raise_for_status()
+    api_response = response.json()
+    check_vk_response(api_response)
+    return api_response
 
 
 def save_photo(response, access_token):
@@ -56,9 +56,9 @@ def save_photo(response, access_token):
         params=params
     )
     response.raise_for_status()
-    response_api = response.json()
-    check_vk_response(response_api)
-    return response_api
+    api_response = response.json()
+    check_vk_response(api_response)
+    return api_response
 
 
 def post_image(response, access_token, text):
